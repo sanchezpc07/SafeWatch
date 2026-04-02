@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitoreo - SafeWatch Guardian</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- TensorFlow.js y Teachable Machine -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">SafeWatch Monitoreo Activo</div>
+    <div class="user-info">
+      <span id="patientName">Paciente</span>
+      <button onclick="logout()" class="btn" style="padding: 0.5rem 1rem; font-size: 1rem;">Salir</button>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="monitor-grid">
+      <!-- Viewer -->
+      <div class="card">
+        <h2 style="margin-bottom: 1rem;">Cámara en Vivo</h2>
+        <div class="camera-container" id="webcam-container">
+          <!-- WebRTC Video appears here -->
+        </div>
+      </div>
+      
+      <!-- Panel de Control y Estado -->
+      <div class="status-panel">
+        <div class="card">
+          <h3 style="margin-bottom: 1rem;">Estado Actual</h3>
+          <div id="statusIndicator" class="status-indicator safe">
+            Normal
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-bottom: 1rem;">Control</h3>
+          <button id="startBtn" class="btn btn-primary" style="width: 100%; margin-bottom: 1rem;" onclick="startMonitoring()">Iniciar Monitoreo</button>
+          <button id="stopBtn" class="btn" style="width: 100%; border: 2px solid var(--border);" onclick="stopMonitoring()" disabled>Detener</button>
+        </div>
+
+        <div class="card">
+          <h3>Depuración Modelo</h3>
+          <div id="label-container" style="margin-top: 1rem; font-family: monospace;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VAPI Modal (Simulado para MVP) -->
+  <div id="vapiModal" class="vapi-modal">
+    <div class="vapi-content">
+      <div style="font-size: 4rem; margin-bottom: 1rem;">🎙️</div>
+      <h2>¿Te encuentras bien?</h2>
+      <p style="font-size: 1.2rem; color: var(--text-muted); margin-bottom: 2rem;">Por favor, responde con tu voz.</p>
+      
+      <div style="display: flex; gap: 1rem; justify-content: center;">
+        <button class="btn btn-success" onclick="simularRespuestaVAPI('estoy bien')">Soy yo, estoy bien</button>
+        <button class="btn btn-danger" onclick="simularRespuestaVAPI('no_responde')">Forzar Alerta (No responde)</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+  <script src="js/monitor.js"></script>
+</body>
+</html>

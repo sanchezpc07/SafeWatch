@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Admin - SafeWatch Guardian</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+      SafeWatch Guardian - Panel Admin
+    </div>
+    <div class="user-info">
+      <span id="adminName">Cargando...</span>
+      <button onclick="logout()" class="btn" style="padding: 0.5rem 1rem; font-size: 1rem; border: 1px solid var(--border);">Cerrar Sesión</button>
+    </div>
+  </nav>
+
+  <div class="container">
+    <h1 style="margin-bottom: 2rem;">Monitoreo Global de Pacientes</h1>
+    
+    <div class="card" style="margin-bottom: 2rem;">
+      <div class="filters">
+        <select id="filterRol" onchange="loadDashboardData()">
+          <option value="">Todos los Roles</option>
+          <option value="paciente">Pacientes</option>
+          <option value="acudiente">Acudientes</option>
+        </select>
+        <select id="filterEstado" onchange="loadDashboardData()">
+          <option value="">Cualquier Estado</option>
+          <option value="normal">Normal</option>
+          <option value="alerta">En Alerta</option>
+        </select>
+      </div>
+
+      <div class="table-responsive">
+        <table id="adminTable">
+          <thead>
+            <tr>
+              <th>Rol</th>
+              <th>Nombres y Apellidos</th>
+              <th>Parentesco</th>
+              <th>Estado Actual</th>
+              <th>Último Incidente</th>
+              <th>Fecha y Hora</th>
+              <th>Respuesta Recibida</th>
+            </tr>
+          </thead>
+          <tbody id="adminTableBody">
+            <!-- Data loaded via JS -->
+            <tr><td colspan="7" style="text-align: center;">Cargando registros...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
