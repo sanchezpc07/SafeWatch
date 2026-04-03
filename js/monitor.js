@@ -125,8 +125,15 @@ async function initTeachableMachine() {
 async function loop() {
   if (!isRunning) return;
   webcam.update();
-  if (!interactionActive) {
-    await predict();
+  try {
+    if (!interactionActive) {
+      await predict();
+    } else {
+      // Mientras hay interacción, solo seguir dibujando el frame
+      ctx.drawImage(webcam.canvas, 0, 0);
+    }
+  } catch (e) {
+    console.warn("[Monitor] Error en frame (se mantiene el loop):", e.message);
   }
   window.requestAnimationFrame(loop);
 }
@@ -187,24 +194,26 @@ async function predict() {
 }
 
 // ─── Dibujar esqueleto de pose ────────────────────────────────────────────────
+// Usa las utilidades de posenet@2.2.1 (globales tras cargar posenet.min.js)
+// tmPose.getAdjacentKeyPoints NO existe en @0.8 — no usar.
 
 function drawPose(pose) {
   if (!pose || !pose.keypoints) return;
 
-  const adjacentPairs = tmPose.getAdjacentKeyPoints(pose.keypoints, 0.5);
-
-  ctx.strokeStyle = "#00f5ff";
+  ctx.strokeStyle = "rgba(0, 245, 255, 0.85)";
   ctx.lineWidth   = 2;
   ctx.shadowBlur  = 8;
   ctx.shadowColor = "#00f5ff";
 
-  adjacentPairs.forEach(([kpA, kpB]) => {
-    ctx.beginPath();
-    ctx.moveTo(kpA.position.x, kpA.position.y);
-    ctx.lineTo(kpB.position.x, kpB.position.y);
-    ctx.stroke();
-  });
+  // posenet.drawSkeleton y drawKeypoints están disponibles como globales
+  if (typeof posenet !== 'undefined' && posenet.drawSkeleton) {
+    posenet.drawSkeleton(pose.keypoints, 0.5, ctx);
+    posenet.drawKeypoints(pose.keypoints, 0.5, ctx);
+    ctx.shadowBlur = 0;
+    return;
+  }
 
+  // Fallback manual: solo puntos clave
   ctx.fillStyle  = "#ffffff";
   ctx.shadowBlur = 4;
   pose.keypoints.forEach(kp => {
