@@ -7,8 +7,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <!-- TensorFlow.js y Teachable Machine -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8.6/dist/teachablemachine-pose.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -26,8 +26,9 @@
       <div class="card">
         <h2 style="margin-bottom: 1rem;">Cámara en Vivo</h2>
         <div class="camera-container" id="webcam-container">
-          <!-- WebRTC Video appears here -->
+          <!-- WebRTC Video + Pose canvas appear here -->
         </div>
+        <div id="pose-status" style="margin-top:0.75rem; text-align:center; font-size:0.9rem; color:var(--text-muted);">Presiona <strong>Iniciar Monitoreo</strong> para activar la cámara</div>
       </div>
       
       <!-- Panel de Control y Estado -->
@@ -46,8 +47,8 @@
         </div>
 
         <div class="card">
-          <h3>Depuración Modelo</h3>
-          <div id="label-container" style="margin-top: 1rem; font-family: monospace;"></div>
+          <h3 style="margin-bottom:1rem;">🧠 Detección de Pose</h3>
+          <div id="label-container" style="margin-top: 0.5rem;"></div>
         </div>
       </div>
     </div>

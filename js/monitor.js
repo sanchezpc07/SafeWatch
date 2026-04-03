@@ -1,147 +1,271 @@
 /**
  * MONITOR.JS
- * Integra WebRTC, Teachable Machine (TensorFlow.js) y la simulación de lógica VAPI.
+ * Integra WebRTC, Teachable Machine Pose (TensorFlow.js) y la simulación de lógica VAPI.
+ * Modelo: https://teachablemachine.withgoogle.com/models/MSQN5JiSD/
+ * Clases: Sentado | Parado | Caida | Sin presencia
  */
 
-// Link de tu propio modelo Teachable Machine entrenado con "Normal" y "Caída"
-// Actualmente usa un modelo genérico vacío como placeholder. Debes incluir el tuyo.
-const URL_TEACHABLE_MACHINE = "https://teachablemachine.withgoogle.com/models/w_X0D25uR/"; 
+const URL_TEACHABLE_MACHINE = "https://teachablemachine.withgoogle.com/models/MSQN5JiSD/";
+
+// Clases del modelo y sus colores de indicador
+const CLASS_CONFIG = {
+  "sentado":        { color: "#3b82f6", emoji: "🪑", label: "Sentado"        },
+  "parado":         { color: "#22c55e", emoji: "🧍", label: "Parado"         },
+  "caida":          { color: "#ef4444", emoji: "🚨", label: "Caída"          },
+  "sin presencia":  { color: "#6b7280", emoji: "👻", label: "Sin presencia"  },
+};
 
 let model, webcam, labelContainer, maxPredictions;
-let isRuning = false;
+let ctx; // canvas context for pose keypoints
+let isRunning = false;
 let fallDetectionStartTime = null;
-let fallThresholdSeconds = 3000; // 3 segundos para confirmar caída
+const FALL_THRESHOLD_MS = 3000; // 3 segundos para confirmar caída
 let interactionActive = false;
 let currentPatientId = null;
+
+// ─── Botones de control ───────────────────────────────────────────────────────
 
 async function startMonitoring() {
   document.getElementById('startBtn').disabled = true;
   document.getElementById('stopBtn').disabled = false;
-  isRuning = true;
+  isRunning = true;
+  document.getElementById('pose-status').textContent = "Cargando modelo…";
   await initTeachableMachine();
 }
 
 async function stopMonitoring() {
-  isRuning = false;
+  isRunning = false;
   document.getElementById('startBtn').disabled = false;
   document.getElementById('stopBtn').disabled = true;
-  if(webcam) {
+  if (webcam) {
     webcam.stop();
     document.getElementById("webcam-container").innerHTML = "";
   }
+  document.getElementById('pose-status').textContent = 'Monitoreo detenido.';
+  document.getElementById('label-container').innerHTML = '';
+  updateStatusUI('safe', 'Normal');
 }
+
+// ─── Inicialización Teachable Machine Pose ────────────────────────────────────
 
 async function initTeachableMachine() {
-    try {
-      const modelURL = URL_TEACHABLE_MACHINE + "model.json";
-      const metadataURL = URL_TEACHABLE_MACHINE + "metadata.json";
+  try {
+    const modelURL    = URL_TEACHABLE_MACHINE + "model.json";
+    const metadataURL = URL_TEACHABLE_MACHINE + "metadata.json";
 
-      // Load model
-      model = await tmImage.load(modelURL, metadataURL);
-      maxPredictions = model.getTotalClasses();
+    // Cargar modelo de pose
+    model = await tmPose.load(modelURL, metadataURL);
+    maxPredictions = model.getTotalClasses();
 
-      // Setup WebRTC Video
-      const flip = true; 
-      webcam = new tmImage.Webcam(600, 400, flip); // width, height, flip
-      await webcam.setup(); 
-      await webcam.play();
-      window.requestAnimationFrame(loop);
+    // Configurar webcam
+    const camWidth  = 560;
+    const camHeight = 420;
+    const flip      = true;
+    webcam = new tmPose.Webcam(camWidth, camHeight, flip);
+    await webcam.setup();
+    await webcam.play();
 
-      document.getElementById("webcam-container").appendChild(webcam.canvas);
-      labelContainer = document.getElementById("label-container");
-      for (let i = 0; i < maxPredictions; i++) {
-          labelContainer.appendChild(document.createElement("div"));
-      }
+    // Canvas para esqueleto de pose sobre el video
+    const canvas  = document.createElement("canvas");
+    canvas.width  = camWidth;
+    canvas.height = camHeight;
+    canvas.style.cssText = "display:block; width:100%; border-radius:12px;";
+    ctx = canvas.getContext("2d");
 
-      // Obtener Paciente de Sesión actual (supongamos mock para UI)
-      const { data } = await dbClient.auth.getSession();
-      currentPatientId = data?.session?.user?.id || 'paciente-generico-123';
-      
-      updateStatusUI('normal', 'Seguro / Normal');
+    const container = document.getElementById("webcam-container");
+    container.innerHTML = "";
+    container.appendChild(canvas);
 
-    } catch (e) {
-      console.error("Error al cargar modelo de TM:", e);
-      alert("Error al cargar cámara o el modelo de Teachable Machine. ¿Permitiste acceso a la web cam?");
-      stopMonitoring();
+    // Construir barras de probabilidad dinámicas
+    labelContainer = document.getElementById("label-container");
+    labelContainer.innerHTML = "";
+    for (let i = 0; i < maxPredictions; i++) {
+      const wrapper = document.createElement("div");
+      wrapper.style.cssText = "margin-bottom:0.75rem;";
+
+      const header = document.createElement("div");
+      header.style.cssText = "display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px; font-weight:500;";
+      header.innerHTML = `<span class="bar-label-${i}">—</span><span class="bar-pct-${i}">0%</span>`;
+
+      const track = document.createElement("div");
+      track.style.cssText = "background:rgba(255,255,255,0.08); border-radius:99px; height:8px; overflow:hidden;";
+
+      const fill = document.createElement("div");
+      fill.className = `bar-fill-${i}`;
+      fill.style.cssText = "height:100%; width:0%; border-radius:99px; transition:width 0.25s, background 0.25s;";
+
+      track.appendChild(fill);
+      wrapper.appendChild(header);
+      wrapper.appendChild(track);
+      labelContainer.appendChild(wrapper);
     }
+
+    // Obtener ID del paciente desde la sesión activa
+    try {
+      const { data } = await dbClient.auth.getSession();
+      currentPatientId = data?.session?.user?.id || 'paciente-demo';
+    } catch (_) {
+      currentPatientId = 'paciente-demo';
+    }
+
+    document.getElementById('pose-status').textContent = "✅ Modelo cargado – Monitoreando…";
+    updateStatusUI('safe', '✅ Normal');
+    window.requestAnimationFrame(loop);
+
+  } catch (e) {
+    console.error("Error al cargar modelo de TM Pose:", e);
+    document.getElementById('pose-status').textContent = "❌ Error al cargar el modelo.";
+    alert("Error al cargar la cámara o el modelo. ¿Permitiste acceso a la webcam?\n\n" + e.message);
+    stopMonitoring();
+  }
 }
 
+// ─── Loop de predicción ───────────────────────────────────────────────────────
+
 async function loop() {
-  if (!isRuning) return;
-  webcam.update(); // Update webcam iframe
-  if(!interactionActive) {
-      await predict();
+  if (!isRunning) return;
+  webcam.update();
+  if (!interactionActive) {
+    await predict();
   }
   window.requestAnimationFrame(loop);
 }
 
 async function predict() {
-  const prediction = await model.predict(webcam.canvas);
+  // Estimar pose + clasificar
+  const { pose, posenetOutput } = await model.estimatePose(webcam.canvas);
+  const prediction = await model.predict(posenetOutput);
+
+  // Dibujar frame de la webcam
+  ctx.drawImage(webcam.canvas, 0, 0);
+
+  // Dibujar esqueleto de pose si hay keypoints
+  if (pose) {
+    drawPose(pose);
+  }
+
   let isFalling = false;
+  let topClass = { name: "", prob: 0 };
 
-  for (let i = 0; i < maxPredictions; i++) {
-      const classPrediction = prediction[i].className + ": " + prediction[i].probability.toFixed(2);
-      labelContainer.childNodes[i].innerHTML = classPrediction;
+  prediction.forEach((p, i) => {
+    const pct = (p.probability * 100).toFixed(1);
+    const key = p.className.toLowerCase();
+    const cfg = CLASS_CONFIG[key] || { color: "#a855f7", emoji: "❓", label: p.className };
 
-      // Logica de Detección
-      if (prediction[i].className.toLowerCase() === "caída" || prediction[i].className.toLowerCase() === "caida") {
-          if (prediction[i].probability > 0.8) {
-              isFalling = true;
-          }
-      }
+    // Actualizar etiqueta y porcentaje
+    const labelEl = labelContainer.querySelector(`.bar-label-${i}`);
+    const pctEl   = labelContainer.querySelector(`.bar-pct-${i}`);
+    const fillEl  = labelContainer.querySelector(`.bar-fill-${i}`);
+
+    if (labelEl) labelEl.textContent = `${cfg.emoji} ${cfg.label}`;
+    if (pctEl)   pctEl.textContent   = `${pct}%`;
+    if (fillEl) {
+      fillEl.style.width      = `${pct}%`;
+      fillEl.style.background = cfg.color;
+    }
+
+    // Rastrear clase dominante
+    if (p.probability > topClass.prob) {
+      topClass = { name: key, prob: p.probability };
+    }
+
+    // Detección de caída con umbral 80%
+    if ((key === "caida") && p.probability > 0.80) {
+      isFalling = true;
+    }
+  });
+
+  // Actualizar indicador de estado según clase dominante
+  if (!isFalling && topClass.prob > 0.60) {
+    const cfg = CLASS_CONFIG[topClass.name] || {};
+    if (topClass.name !== "caida") {
+      updateStatusUI('safe', `${cfg.emoji || ''} ${cfg.label || topClass.name}`);
+    }
   }
 
   handleFallLogic(isFalling);
 }
 
-function handleFallLogic(isFalling) {
-    if (isFalling) {
-        if (!fallDetectionStartTime) {
-            fallDetectionStartTime = Date.now();
-        } else {
-            const timeElapsed = Date.now() - fallDetectionStartTime;
-            if (timeElapsed >= fallThresholdSeconds) {
-                // Confirmamos Caída despues de 3 segundos
-                triggerVoiceInteraction();
-            }
-        }
-    } else {
-        // Resetea el contador si se recupera rápido
-        fallDetectionStartTime = null; 
+// ─── Dibujar esqueleto de pose ────────────────────────────────────────────────
+
+function drawPose(pose) {
+  if (!pose || !pose.keypoints) return;
+
+  const adjacentPairs = tmPose.getAdjacentKeyPoints(pose.keypoints, 0.5);
+
+  ctx.strokeStyle = "#00f5ff";
+  ctx.lineWidth   = 2;
+  ctx.shadowBlur  = 8;
+  ctx.shadowColor = "#00f5ff";
+
+  adjacentPairs.forEach(([kpA, kpB]) => {
+    ctx.beginPath();
+    ctx.moveTo(kpA.position.x, kpA.position.y);
+    ctx.lineTo(kpB.position.x, kpB.position.y);
+    ctx.stroke();
+  });
+
+  ctx.fillStyle  = "#ffffff";
+  ctx.shadowBlur = 4;
+  pose.keypoints.forEach(kp => {
+    if (kp.score >= 0.5) {
+      ctx.beginPath();
+      ctx.arc(kp.position.x, kp.position.y, 5, 0, 2 * Math.PI);
+      ctx.fill();
     }
+  });
+
+  ctx.shadowBlur = 0;
+}
+
+// ─── Lógica de caída con temporizador ────────────────────────────────────────
+
+function handleFallLogic(isFalling) {
+  if (isFalling) {
+    if (!fallDetectionStartTime) {
+      fallDetectionStartTime = Date.now();
+      updateStatusUI('alerta', '⚠️ Posible caída…');
+    } else {
+      const elapsed = Date.now() - fallDetectionStartTime;
+      if (elapsed >= FALL_THRESHOLD_MS) {
+        triggerVoiceInteraction();
+      }
+    }
+  } else {
+    // Recuperación: reset contador si la postura vuelve a ser normal
+    if (fallDetectionStartTime && !interactionActive) {
+      fallDetectionStartTime = null;
+    }
+  }
 }
 
 function updateStatusUI(statusClass, text) {
-    const statusDiv = document.getElementById('statusIndicator');
-    statusDiv.className = `status-indicator ${statusClass === 'alerta' ? 'danger' : 'safe'}`;
-    statusDiv.innerText = text;
+  const statusDiv = document.getElementById('statusIndicator');
+  statusDiv.className = `status-indicator ${statusClass === 'alerta' ? 'danger' : 'safe'}`;
+  statusDiv.innerText = text;
 }
 
-// ============== Lógica VAPI (Simulada para visualización de evento) ==============
+// ─── Lógica VAPI (Simulada) ───────────────────────────────────────────────────
+
 function triggerVoiceInteraction() {
-  if(interactionActive) return;
-  interactionActive = true;
+  if (interactionActive) return;
+  interactionActive   = true;
   fallDetectionStartTime = null;
 
-  updateStatusUI('alerta', 'Posible Caída - Verificando Voz');
-  
-  // Registrar en Estado
-  dbClient.from('pacientes_estado').update({ estado_actual: 'posible_caida' }).eq('paciente_id', currentPatientId);
+  updateStatusUI('alerta', '🚨 Posible Caída — Verificando voz…');
 
-  // Modal visual para la simulación
-  const modal = document.getElementById('vapiModal');
-  modal.classList.add('active');
+  try {
+    dbClient.from('pacientes_estado')
+      .update({ estado_actual: 'posible_caida' })
+      .eq('paciente_id', currentPatientId);
+  } catch (_) {}
 
-  // Integración VAPI real aquí (Web SDK):
-  // const vapi = new Vapi("VAPI_PUBLIC_KEY");
-  // vapi.start("VAPI_ASSISTANT_ID");
-  
-  // Aquí usamos la voz nativa del navegador para simular a VAPI preguntando
+  document.getElementById('vapiModal').classList.add('active');
+
   const msg = new SpeechSynthesisUtterance("¿Te encuentras bien?");
   msg.lang = 'es-ES';
   window.speechSynthesis.speak(msg);
 
-  // Simular tiempo de espera por si el usuario no presiona nada (Timeout 10 segs)
   window.vapiTimeout = setTimeout(() => {
     simularRespuestaVAPI('no_responde');
   }, 10000);
@@ -149,39 +273,40 @@ function triggerVoiceInteraction() {
 
 async function simularRespuestaVAPI(respuestaUsuario) {
   clearTimeout(window.vapiTimeout);
-  const modal = document.getElementById('vapiModal');
-  modal.classList.remove('active');
+  document.getElementById('vapiModal').classList.remove('active');
 
-  if (respuestaUsuario === 'estoy bien' || respuestaUsuario === 'afirmativo' || respuestaUsuario === 'si') {
-      // Falsa alarma o el usuario se recuperó
-      updateStatusUI('safe', 'Normal');
-      
+  const esBien = ['estoy bien', 'afirmativo', 'si'].includes(respuestaUsuario);
+
+  if (esBien) {
+    updateStatusUI('safe', '✅ Normal');
+    try {
       await dbClient.from('eventos').insert({
         paciente_id: currentPatientId,
         incidente: 'caida_detectada',
         respuesta_recibida: 'El paciente respondió que se encuentra bien.',
       });
-      
-      await dbClient.from('pacientes_estado').update({ estado_actual: 'normal' }).eq('paciente_id', currentPatientId);
-
+      await dbClient.from('pacientes_estado')
+        .update({ estado_actual: 'normal' })
+        .eq('paciente_id', currentPatientId);
+    } catch (_) {}
   } else {
-      // Enviar Alerta Crítica (No respondió o pidió ayuda)
-      updateStatusUI('alerta', '🚨 ALERTA CRÍTICA ENVIADA');
-      
+    updateStatusUI('alerta', '🚨 ALERTA CRÍTICA ENVIADA');
+    try {
       await dbClient.from('eventos').insert({
         paciente_id: currentPatientId,
         incidente: 'alerta_enviada',
         respuesta_recibida: 'Sin respuesta o respuesta negativa.',
       });
-      
-      await dbClient.from('pacientes_estado').update({ estado_actual: 'alerta' }).eq('paciente_id', currentPatientId);
-      
-      // Llamada de Webhook simulado
-      fetch('https://webhook.site/placeholder_url', { 
-         method: 'POST', body: JSON.stringify({ paciente: currentPatientId, estado: 'Emergencia' }) 
-      }).catch(e => console.log('Webhook test'));
+      await dbClient.from('pacientes_estado')
+        .update({ estado_actual: 'alerta' })
+        .eq('paciente_id', currentPatientId);
+    } catch (_) {}
+
+    fetch('https://webhook.site/placeholder_url', {
+      method: 'POST',
+      body: JSON.stringify({ paciente: currentPatientId, estado: 'Emergencia' })
+    }).catch(() => {});
   }
 
-  // Reactivar detección
   interactionActive = false;
 }
