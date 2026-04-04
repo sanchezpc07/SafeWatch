@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const { data: profileData } = await dbClient.from('users').select('rol').eq('id', data.user.id).single();
         
         if (profileData && profileData.rol === 'superadmin') {
-          window.location.href = 'dashboard.html';
+          window.location.href = 'admin.html';
         } else {
           window.location.href = 'monitor.html';
         }
@@ -60,7 +60,7 @@ async function checkSession() {
   if (!session && !SUPABASE_URL.includes("YOUR")) {
     window.location.href = 'index.html';
   } else if (!session) {
-    // Si estamos en mock mode, inventamos una sesion falsa
+    // Mock Mode fallback
   } else {
     // Session activa, mostrar nombre
     const { data: profileData } = await dbClient.from('users').select('nombres_apellidos').eq('id', session.user.id).single();
@@ -72,6 +72,7 @@ async function checkSession() {
 }
 
 async function logout() {
+  localStorage.removeItem('safewatch_mock_user');
   await dbClient.auth.signOut();
   window.location.href = 'index.html';
 }
@@ -80,15 +81,26 @@ function createMockSupabase() {
   return {
     auth: {
       signInWithPassword: async ({email, password}) => {
-        if (email === 'Sanchezpc07@gmail.com' && password === 'S@fewatcH') {
-          return { data: { user: { id: 'superadmin-mock-id' } }, error: null };
-        } else if (password === '123456') { // paciente de prueba
-           return { data: { user: { id: 'patient-mock-id' } }, error: null };
+        let userId = 'patient-mock-id';
+        if (email === 'Super-Admin@safewatch.com' && password === 'S@feWatcH2026') {
+          userId = 'superadmin-mock-id';
+        } else if (email === 'Sanchezpc07@gmail.com' && password === 'S@fewatcH') {
+          userId = 'superadmin-mock-id';
+        } else if (password !== '123456') {
+          return { data: null, error: new Error("Invalid credentials") };
         }
-        return { data: null, error: new Error("Invalid credentials") };
+        
+        localStorage.setItem('safewatch_mock_user', userId);
+        return { data: { user: { id: userId } }, error: null };
       },
-      getSession: async () => ({ data: { session: { user: { id: 'mock-id' } } } }),
-      signOut: async () => {}
+      getSession: async () => {
+        const userId = localStorage.getItem('safewatch_mock_user');
+        if (!userId) return { data: { session: null } };
+        return { data: { session: { user: { id: userId } } } };
+      },
+      signOut: async () => {
+        localStorage.removeItem('safewatch_mock_user');
+      }
     },
     from: (table) => {
       return {

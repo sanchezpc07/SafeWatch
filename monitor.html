@@ -11,6 +11,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet@2.2.1/dist/posenet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8/dist/teachablemachine-pose.min.js"></script>
+  <!-- TensorFlow Speech Commands para modelo de audio Teachable Machine -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0/dist/speech-commands.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -56,19 +58,66 @@
     </div>
   </div>
 
-  <!-- VAPI Modal (Simulado para MVP) -->
+  <!-- Modal de Verificación de Voz con IA -->
   <div id="vapiModal" class="vapi-modal">
     <div class="vapi-content">
-      <div style="font-size: 4rem; margin-bottom: 1rem;">🎙️</div>
+
+      <!-- Icono de micrófono con animación de escucha -->
+      <div id="micIcon" style="font-size: 4rem; margin-bottom: 1rem; transition: transform 0.3s;">🎙️</div>
       <h2>¿Te encuentras bien?</h2>
-      <p style="font-size: 1.2rem; color: var(--text-muted); margin-bottom: 2rem;">Por favor, responde con tu voz.</p>
-      
-      <div style="display: flex; gap: 1rem; justify-content: center;">
-        <button class="btn btn-success" onclick="simularRespuestaVAPI('estoy bien')">Soy yo, estoy bien</button>
-        <button class="btn btn-danger" onclick="simularRespuestaVAPI('no_responde')">Forzar Alerta (No responde)</button>
+      <p style="font-size: 1.1rem; color: var(--text-muted); margin-bottom: 1.5rem;">Responde con tu voz – la IA está escuchando</p>
+
+      <!-- Indicador de estado de escucha -->
+      <div id="listenStatus" style="
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.4);
+        border-radius: 99px; padding: 0.4rem 1.2rem; margin-bottom: 1.5rem;
+        font-size: 0.9rem; color: #a5b4fc;
+      ">
+        <span class="pulse-dot" style="
+          width: 8px; height: 8px; border-radius: 50%; background: #6366f1;
+          animation: pulseDot 1.2s ease-in-out infinite;
+        "></span>
+        <span id="listenStatusText">Cargando modelo de voz…</span>
+      </div>
+
+      <!-- Barras de confianza en tiempo real -->
+      <div id="voiceBarContainer" style="width: 100%; margin-bottom: 1.5rem;"></div>
+
+      <!-- Temporizador de cuenta regresiva -->
+      <div id="voiceCountdown" style="
+        font-size: 2rem; font-weight: 700; color: var(--primary);
+        margin-bottom: 1rem; min-height: 2.5rem;
+      "></div>
+
+      <!-- Resultado de detección -->
+      <div id="voiceResult" style="
+        font-size: 1.1rem; font-weight: 600; min-height: 1.5rem;
+        margin-bottom: 1.5rem;
+      "></div>
+
+      <!-- Botones de respaldo (siempre visibles como alternativa) -->
+      <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">O selecciona manualmente:</p>
+        <div style="display: flex; gap: 1rem; justify-content: center;">
+          <button class="btn btn-success" onclick="simularRespuestaVAPI('estoy bien')">✅ Estoy bien</button>
+          <button class="btn btn-danger" onclick="simularRespuestaVAPI('no_responde')">🚨 Necesito ayuda</button>
+        </div>
       </div>
     </div>
   </div>
+
+  <style>
+  @keyframes pulseDot {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%       { transform: scale(1.6); opacity: 0.5; }
+  }
+  @keyframes micPulse {
+    0%, 100% { transform: scale(1); }
+    50%       { transform: scale(1.15); }
+  }
+  .mic-listening { animation: micPulse 0.8s ease-in-out infinite; }
+  </style>
 
   <script src="js/auth.js"></script>
   <script src="js/monitor.js"></script>

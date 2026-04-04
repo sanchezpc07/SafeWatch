@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Super-Admin - SafeWatch Guardian</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --admin-primary: #6366f1;
+      --admin-secondary: #4f46e5;
+      --glass-bg: rgba(15, 23, 42, 0.8);
+      --glass-border: rgba(255, 255, 255, 0.1);
+    }
+    
+    body {
+      background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
+      font-family: 'Outfit', sans-serif;
+      min-height: 100vh;
+      color: #f8fafc;
+    }
+
+    .admin-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .admin-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--glass-border);
+    }
+
+    .admin-grid {
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 2rem;
+    }
+
+    .card-admin {
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 1.5rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+
+    .stat-card {
+      text-align: center;
+      padding: 1rem;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .stat-value {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--admin-primary);
+    }
+
+    .stat-label {
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+
+    /* Table Styles */
+    .admin-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 0.5rem;
+    }
+
+    .admin-table th {
+      text-align: left;
+      padding: 1rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.85rem;
+    }
+
+    .admin-table tr {
+      background: rgba(255,255,255,0.02);
+      transition: transform 0.2s;
+    }
+
+    .admin-table tr:hover {
+      background: rgba(255,255,255,0.05);
+      transform: scale(1.005);
+    }
+
+    .admin-table td {
+      padding: 1rem;
+      font-size: 0.9rem;
+    }
+
+    .badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 99px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .badge-demo { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+    .badge-real { background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .badge-alerta { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    /* Generator Box */
+    .generator-box {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1));
+      border: 1px dashed var(--admin-primary);
+      padding: 1.5rem;
+      border-radius: 16px;
+      margin-top: 1.5rem;
+    }
+
+    .input-admin {
+      width: 100%;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 0.75rem;
+      color: white;
+      margin-top: 1rem;
+    }
+
+    .btn-inject {
+      background: linear-gradient(to right, var(--admin-primary), #a855f7);
+      color: white;
+      border: none;
+      padding: 0.8rem 1.5rem;
+      border-radius: 10px;
+      font-weight: 600;
+      width: 100%;
+      margin-top: 1rem;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-inject:hover {
+      filter: brightness(1.2);
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+    }
+
+    /* Modal Log */
+    .modal-log {
+      max-height: 100px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.75rem;
+      background: #000;
+      padding: 0.5rem;
+      border-radius: 4px;
+      margin-top: 0.25rem;
+      color: #22c55e;
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-container">
+    <header class="admin-header">
+      <div>
+        <h1 style="font-size: 2rem; margin:0;">💎 SafeWatch Super-Admin</h1>
+        <p style="color: var(--text-muted);">Módulo de Gestión de Demos y Clientes Reales</p>
+      </div>
+      <div style="display: flex; gap: 1rem; align-items: center;">
+        <div style="text-align: right;">
+          <div id="adminName" style="font-weight: 600;">SuperAdmin</div>
+          <div style="font-size: 0.75rem; color: #22c55e;">● Online</div>
+        </div>
+        <button onclick="logout()" class="btn" style="padding: 0.5rem 1rem;">Salir</button>
+      </div>
+    </header>
+
+    <div class="admin-grid">
+      <!-- PANEL IZQUIERDO: Métricas y Generador -->
+      <aside>
+        <div class="card-admin">
+          <h3 style="margin-top:0;">📊 Resumen Global</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.5rem;">
+            <div class="stat-card">
+              <div id="countDemos" class="stat-value">0</div>
+              <div class="stat-label">Demos</div>
+            </div>
+            <div class="stat-card">
+              <div id="countReal" class="stat-value">0</div>
+              <div class="stat-label">Concretados</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-admin" style="margin-top: 1.5rem;">
+          <h3 style="margin-top:0;">🚀 Puesta en Marcha (Demo)</h3>
+          <p style="font-size: 0.85rem; color: var(--text-muted);">Crea un ecosistema completo para una presentación en vivo.</p>
+          
+          <div class="generator-box">
+            <label style="font-size: 0.8rem; font-weight: 600;">Nombre del Paciente Demo</label>
+            <input type="text" id="demoPatientName" class="input-admin" placeholder="Ej: Mario Casas">
+            <button onclick="generateDemoScenario()" class="btn-inject" id="btnInject">Inyectar Datos Demo</button>
+          </div>
+          
+          <div id="injectLog" style="margin-top: 1rem; font-size: 0.8rem; height: 60px; overflow-y:auto; color: #a5b4fc;">
+            Esperando orden...
+          </div>
+        </div>
+      </aside>
+
+      <!-- PANEL DERECHO: Feed de Incidentes y Transcripciones -->
+      <main>
+        <div class="card-admin">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h3 style="margin:0;">🔴 Monitoreo de Incidentes (Global)</h3>
+            <button onclick="loadIncidents()" class="btn" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); font-size: 0.8rem;">🔄 Refrescar</button>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Paciente</th>
+                  <th>Tipo</th>
+                  <th>Incidente</th>
+                  <th>Resultado IA</th>
+                  <th>Transcripción</th>
+                </tr>
+              </thead>
+              <tbody id="incidentsTableBody">
+                <!-- Se llena con admin.js -->
+                <tr><td colspan="5" style="text-align:center; padding: 3rem; color: var(--text-muted);">Cargando reporte de incidentes...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

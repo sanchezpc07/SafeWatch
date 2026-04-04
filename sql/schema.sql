@@ -9,6 +9,7 @@ CREATE TABLE public.users (
   nombres_apellidos TEXT NOT NULL,
   parentesco TEXT,
   paciente_id UUID REFERENCES public.users(id),
+  tipo_usuario TEXT CHECK (tipo_usuario IN ('demo', 'concretado')) DEFAULT 'demo',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
@@ -27,6 +28,9 @@ CREATE TABLE public.eventos (
   incidente TEXT CHECK (incidente IN ('caida_detectada', 'alerta_enviada')) NOT NULL,
   fecha_hora TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
   respuesta_recibida TEXT,
+  transcripcion_voz TEXT,
+  clase_detectada TEXT,
+  confianza_modelo NUMERIC(5,2),
   atendido BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
@@ -48,7 +52,10 @@ ALTER TABLE public.pacientes_estado DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.eventos DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.contactos_emergencia DISABLE ROW LEVEL SECURITY;
 
--- Insertar SuperAdmin Local (Simulado - Para supabase de verdad hay que crearlo vía auth primero)
--- El password será asignado desde la app o Dashboard de supabase.
--- Email admin de prueba: Sanchezpc07@gmail.com
--- Contraseña prueba (para dashboard): S@fewatcH
+-- Vistas para el Dashboard de SuperAdmin
+-- CREATE OR REPLACE VIEW public.admin_user_summary AS
+-- SELECT rol, tipo_usuario, count(*) as total FROM public.users GROUP BY rol, tipo_usuario;
+
+-- CREATE OR REPLACE VIEW public.admin_incidents_view AS
+-- SELECT e.id, u.nombres_apellidos as paciente, u.tipo_usuario, e.incidente, e.fecha_hora, e.respuesta_recibida, e.transcripcion_voz, e.clase_detectada as deteccion_ia, e.confianza_modelo as confianza, e.atendido
+-- FROM public.eventos e JOIN public.users u ON e.paciente_id = u.id ORDER BY e.fecha_hora DESC;

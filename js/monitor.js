@@ -1,13 +1,17 @@
 /**
  * MONITOR.JS
- * Integra WebRTC, Teachable Machine Pose (TensorFlow.js) y la simulación de lógica VAPI.
- * Modelo: https://teachablemachine.withgoogle.com/models/MSQN5JiSD/
- * Clases: Sentado | Parado | Caida | Sin presencia
+ * Integra WebRTC, Teachable Machine Pose (TensorFlow.js) y modelo de audio de voz.
+ * Modelo POSE:  https://teachablemachine.withgoogle.com/models/MSQN5JiSD/
+ * Modelo AUDIO: https://teachablemachine.withgoogle.com/models/zktd2sDJJ/
+ * Clases pose:  Sentado | Parado | Caida | Sin presencia
+ * Clases audio: Background Noise | Estoy bien | No estoy bien
  */
 
-const URL_TEACHABLE_MACHINE = "https://teachablemachine.withgoogle.com/models/MSQN5JiSD/";
+// ─── URLs de modelos ──────────────────────────────────────────────────────────
+const URL_POSE_MODEL  = "https://teachablemachine.withgoogle.com/models/MSQN5JiSD/";
+const URL_AUDIO_MODEL = "https://teachablemachine.withgoogle.com/models/zktd2sDJJ/";
 
-// Clases del modelo y sus colores de indicador
+// ─── Configuración de clases de pose ─────────────────────────────────────────
 const CLASS_CONFIG = {
   "sentado":        { color: "#3b82f6", emoji: "🪑", label: "Sentado"        },
   "parado":         { color: "#22c55e", emoji: "🧍", label: "Parado"         },
@@ -15,28 +19,55 @@ const CLASS_CONFIG = {
   "sin presencia":  { color: "#6b7280", emoji: "👻", label: "Sin presencia"  },
 };
 
-let model, webcam, labelContainer, maxPredictions;
-let ctx; // canvas context for pose keypoints
-let isRunning = false;
+// ─── Configuración de clases de audio ────────────────────────────────────────
+const AUDIO_CONFIG = {
+  "Background Noise": { color: "#6b7280", emoji: "🔇", label: "Silencio / Ruido" },
+  "Estoy bien":       { color: "#22c55e", emoji: "✅", label: "Estoy bien"        },
+  "No estoy bien":    { color: "#ef4444", emoji: "🆘", label: "No estoy bien"     },
+};
+
+// ─── Estado global ────────────────────────────────────────────────────────────
+let poseModel, webcam, labelContainer, maxPredictions;
+let ctx;
+let isRunning           = false;
 let fallDetectionStartTime = null;
-const FALL_THRESHOLD_MS = 3000; // 3 segundos para confirmar caída
-let interactionActive = false;
-let currentPatientId = null;
+const FALL_THRESHOLD_MS = 3000;  // 3 s sostenido para confirmar caída
+let interactionActive   = false;
+let currentPatientId    = null;
+
+// Estado del modelo de audio
+let audioRecognizer     = null;
+let audioModelLoaded    = false;
+let audioLoadingInProgress = false;
+let voiceCountdownTimer = null;
+let voiceListenTimeout  = null;
+
+// Registro de voz para BD
+let voiceTranscriptBuffer = []; 
+let voiceMetadata = { 
+  clase: "Ninguna", 
+  confianza: 0 
+};
 
 // ─── Botones de control ───────────────────────────────────────────────────────
 
 async function startMonitoring() {
   document.getElementById('startBtn').disabled = true;
-  document.getElementById('stopBtn').disabled = false;
+  document.getElementById('stopBtn').disabled  = false;
   isRunning = true;
-  document.getElementById('pose-status').textContent = "Cargando modelo…";
-  await initTeachableMachine();
+  document.getElementById('pose-status').textContent = "Cargando modelo de pose…";
+
+  // Cargar modelo de audio en paralelo (para tenerlo listo cuando se necesite)
+  preloadAudioModel();
+
+  await initTeachableMachinePose();
 }
 
 async function stopMonitoring() {
   isRunning = false;
   document.getElementById('startBtn').disabled = false;
-  document.getElementById('stopBtn').disabled = true;
+  document.getElementById('stopBtn').disabled  = true;
+  stopVoiceListening();
   if (webcam) {
     webcam.stop();
     document.getElementById("webcam-container").innerHTML = "";
@@ -46,18 +77,42 @@ async function stopMonitoring() {
   updateStatusUI('safe', 'Normal');
 }
 
+// ─── Precarga silenciosa del modelo de audio ──────────────────────────────────
+
+async function preloadAudioModel() {
+  if (audioModelLoaded || audioLoadingInProgress) return;
+  audioLoadingInProgress = true;
+  try {
+    const checkpointURL = URL_AUDIO_MODEL + "model.json";
+    const metadataURL   = URL_AUDIO_MODEL + "metadata.json";
+
+    audioRecognizer = speechCommands.create(
+      "BROWSER_FFT",   // tipo de extractor de características
+      undefined,
+      checkpointURL,
+      metadataURL
+    );
+    await audioRecognizer.ensureModelLoaded();
+    audioModelLoaded = true;
+    console.log("[Audio] Modelo de voz cargado. Clases:", audioRecognizer.wordLabels());
+  } catch (e) {
+    console.warn("[Audio] No se pudo precargar el modelo de voz:", e.message);
+    audioModelLoaded = false;
+  } finally {
+    audioLoadingInProgress = false;
+  }
+}
+
 // ─── Inicialización Teachable Machine Pose ────────────────────────────────────
 
-async function initTeachableMachine() {
+async function initTeachableMachinePose() {
   try {
-    const modelURL    = URL_TEACHABLE_MACHINE + "model.json";
-    const metadataURL = URL_TEACHABLE_MACHINE + "metadata.json";
+    const modelURL    = URL_POSE_MODEL + "model.json";
+    const metadataURL = URL_POSE_MODEL + "metadata.json";
 
-    // Cargar modelo de pose
-    model = await tmPose.load(modelURL, metadataURL);
-    maxPredictions = model.getTotalClasses();
+    poseModel      = await tmPose.load(modelURL, metadataURL);
+    maxPredictions = poseModel.getTotalClasses();
 
-    // Configurar webcam
     const camWidth  = 560;
     const camHeight = 420;
     const flip      = true;
@@ -65,7 +120,6 @@ async function initTeachableMachine() {
     await webcam.setup();
     await webcam.play();
 
-    // Canvas para esqueleto de pose sobre el video
     const canvas  = document.createElement("canvas");
     canvas.width  = camWidth;
     canvas.height = camHeight;
@@ -76,7 +130,7 @@ async function initTeachableMachine() {
     container.innerHTML = "";
     container.appendChild(canvas);
 
-    // Construir barras de probabilidad dinámicas
+    // Barras de probabilidad de pose
     labelContainer = document.getElementById("label-container");
     labelContainer.innerHTML = "";
     for (let i = 0; i < maxPredictions; i++) {
@@ -100,7 +154,7 @@ async function initTeachableMachine() {
       labelContainer.appendChild(wrapper);
     }
 
-    // Obtener ID del paciente desde la sesión activa
+    // Obtener ID del paciente
     try {
       const { data } = await dbClient.auth.getSession();
       currentPatientId = data?.session?.user?.id || 'paciente-demo';
@@ -108,19 +162,19 @@ async function initTeachableMachine() {
       currentPatientId = 'paciente-demo';
     }
 
-    document.getElementById('pose-status').textContent = "✅ Modelo cargado – Monitoreando…";
+    document.getElementById('pose-status').textContent = "✅ Modelo de pose cargado – Monitoreando…";
     updateStatusUI('safe', '✅ Normal');
     window.requestAnimationFrame(loop);
 
   } catch (e) {
     console.error("Error al cargar modelo de TM Pose:", e);
     document.getElementById('pose-status').textContent = "❌ Error al cargar el modelo.";
-    alert("Error al cargar la cámara o el modelo. ¿Permitiste acceso a la webcam?\n\n" + e.message);
+    alert("Error al cargar la cámara o el modelo de pose.\n\n" + e.message);
     stopMonitoring();
   }
 }
 
-// ─── Loop de predicción ───────────────────────────────────────────────────────
+// ─── Loop de predicción de pose ───────────────────────────────────────────────
 
 async function loop() {
   if (!isRunning) return;
@@ -129,37 +183,29 @@ async function loop() {
     if (!interactionActive) {
       await predict();
     } else {
-      // Mientras hay interacción, solo seguir dibujando el frame
       ctx.drawImage(webcam.canvas, 0, 0);
     }
   } catch (e) {
-    console.warn("[Monitor] Error en frame (se mantiene el loop):", e.message);
+    console.warn("[Monitor] Error en frame:", e.message);
   }
   window.requestAnimationFrame(loop);
 }
 
 async function predict() {
-  // Estimar pose + clasificar
-  const { pose, posenetOutput } = await model.estimatePose(webcam.canvas);
-  const prediction = await model.predict(posenetOutput);
+  const { pose, posenetOutput } = await poseModel.estimatePose(webcam.canvas);
+  const prediction = await poseModel.predict(posenetOutput);
 
-  // Dibujar frame de la webcam
   ctx.drawImage(webcam.canvas, 0, 0);
-
-  // Dibujar esqueleto de pose si hay keypoints
-  if (pose) {
-    drawPose(pose);
-  }
+  if (pose) drawPose(pose);
 
   let isFalling = false;
-  let topClass = { name: "", prob: 0 };
+  let topClass  = { name: "", prob: 0 };
 
   prediction.forEach((p, i) => {
     const pct = (p.probability * 100).toFixed(1);
     const key = p.className.toLowerCase();
     const cfg = CLASS_CONFIG[key] || { color: "#a855f7", emoji: "❓", label: p.className };
 
-    // Actualizar etiqueta y porcentaje
     const labelEl = labelContainer.querySelector(`.bar-label-${i}`);
     const pctEl   = labelContainer.querySelector(`.bar-pct-${i}`);
     const fillEl  = labelContainer.querySelector(`.bar-fill-${i}`);
@@ -171,18 +217,10 @@ async function predict() {
       fillEl.style.background = cfg.color;
     }
 
-    // Rastrear clase dominante
-    if (p.probability > topClass.prob) {
-      topClass = { name: key, prob: p.probability };
-    }
-
-    // Detección de caída con umbral 80%
-    if ((key === "caida") && p.probability > 0.80) {
-      isFalling = true;
-    }
+    if (p.probability > topClass.prob) topClass = { name: key, prob: p.probability };
+    if (key === "caida" && p.probability > 0.80) isFalling = true;
   });
 
-  // Actualizar indicador de estado según clase dominante
   if (!isFalling && topClass.prob > 0.60) {
     const cfg = CLASS_CONFIG[topClass.name] || {};
     if (topClass.name !== "caida") {
@@ -194,8 +232,6 @@ async function predict() {
 }
 
 // ─── Dibujar esqueleto de pose ────────────────────────────────────────────────
-// Usa las utilidades de posenet@2.2.1 (globales tras cargar posenet.min.js)
-// tmPose.getAdjacentKeyPoints NO existe en @0.8 — no usar.
 
 function drawPose(pose) {
   if (!pose || !pose.keypoints) return;
@@ -205,7 +241,6 @@ function drawPose(pose) {
   ctx.shadowBlur  = 8;
   ctx.shadowColor = "#00f5ff";
 
-  // posenet.drawSkeleton y drawKeypoints están disponibles como globales
   if (typeof posenet !== 'undefined' && posenet.drawSkeleton) {
     posenet.drawSkeleton(pose.keypoints, 0.5, ctx);
     posenet.drawKeypoints(pose.keypoints, 0.5, ctx);
@@ -213,7 +248,6 @@ function drawPose(pose) {
     return;
   }
 
-  // Fallback manual: solo puntos clave
   ctx.fillStyle  = "#ffffff";
   ctx.shadowBlur = 4;
   pose.keypoints.forEach(kp => {
@@ -223,11 +257,10 @@ function drawPose(pose) {
       ctx.fill();
     }
   });
-
   ctx.shadowBlur = 0;
 }
 
-// ─── Lógica de caída con temporizador ────────────────────────────────────────
+// ─── Lógica de caída ──────────────────────────────────────────────────────────
 
 function handleFallLogic(isFalling) {
   if (isFalling) {
@@ -241,7 +274,6 @@ function handleFallLogic(isFalling) {
       }
     }
   } else {
-    // Recuperación: reset contador si la postura vuelve a ser normal
     if (fallDetectionStartTime && !interactionActive) {
       fallDetectionStartTime = null;
     }
@@ -254,58 +286,229 @@ function updateStatusUI(statusClass, text) {
   statusDiv.innerText = text;
 }
 
-// ─── Lógica VAPI (Simulada) ───────────────────────────────────────────────────
+// ─── Activar verificación de voz con IA ──────────────────────────────────────
 
 function triggerVoiceInteraction() {
   if (interactionActive) return;
-  interactionActive   = true;
+  interactionActive      = true;
   fallDetectionStartTime = null;
 
   updateStatusUI('alerta', '🚨 Posible Caída — Verificando voz…');
 
+  // Actualizar estado en BD
   try {
     dbClient.from('pacientes_estado')
       .update({ estado_actual: 'posible_caida' })
       .eq('paciente_id', currentPatientId);
   } catch (_) {}
 
+  // Abrir modal
   document.getElementById('vapiModal').classList.add('active');
 
-  const msg = new SpeechSynthesisUtterance("¿Te encuentras bien?");
-  msg.lang = 'es-ES';
+  // Anunciar por síntesis de voz
+  const msg  = new SpeechSynthesisUtterance("¿Te encuentras bien? Por favor respond.");
+  msg.lang   = 'es-ES';
+  msg.rate   = 0.9;
   window.speechSynthesis.speak(msg);
 
-  window.vapiTimeout = setTimeout(() => {
-    simularRespuestaVAPI('no_responde');
+  // Iniciar escucha con el modelo de audio de TM
+  startVoiceListening();
+}
+
+// ─── Escucha activa con Teachable Machine Audio ───────────────────────────────
+
+async function startVoiceListening() {
+  const statusText    = document.getElementById('listenStatusText');
+  const barContainer  = document.getElementById('voiceBarContainer');
+  const countdownEl   = document.getElementById('voiceCountdown');
+  const resultEl      = document.getElementById('voiceResult');
+  const micIcon       = document.getElementById('micIcon');
+
+  barContainer.innerHTML = "";
+  countdownEl.textContent = "";
+  resultEl.textContent    = "";
+
+  // Reset de buffer y metadatos para esta nueva sesión de escucha
+  voiceTranscriptBuffer = [];
+  voiceMetadata = { clase: "Silencio", confianza: 0 };
+
+  // Esperar a que el modelo esté listo (se precargó al iniciar el monitoreo)
+  if (!audioModelLoaded) {
+    statusText.textContent = "Cargando modelo de voz…";
+    await preloadAudioModel();
+  }
+
+  if (!audioModelLoaded || !audioRecognizer) {
+    statusText.textContent = "❌ Modelo de voz no disponible — usa los botones";
+    return;
+  }
+
+  // Construir barras de confianza de audio en tiempo real
+  const wordLabels = audioRecognizer.wordLabels();
+  const barElements = {};
+  wordLabels.forEach(label => {
+    const cfg = AUDIO_CONFIG[label] || { color: "#a855f7", emoji: "🎙️", label };
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = "margin-bottom:0.6rem;";
+
+    const header = document.createElement("div");
+    header.style.cssText = "display:flex; justify-content:space-between; font-size:0.82rem; margin-bottom:3px; font-weight:500;";
+    header.innerHTML = `<span>${cfg.emoji} ${cfg.label}</span><span class="audio-pct-${label.replace(/\s/g,'_')}">0%</span>`;
+
+    const track = document.createElement("div");
+    track.style.cssText = "background:rgba(255,255,255,0.08); border-radius:99px; height:7px; overflow:hidden;";
+
+    const fill = document.createElement("div");
+    fill.className = `audio-fill-${label.replace(/\s/g,'_')}`;
+    fill.style.cssText = `height:100%; width:0%; border-radius:99px; background:${cfg.color}; transition:width 0.15s, background 0.15s;`;
+
+    track.appendChild(fill);
+    wrapper.appendChild(header);
+    wrapper.appendChild(track);
+    barContainer.appendChild(wrapper);
+    barElements[label] = { pctEl: header.querySelector(`.audio-pct-${label.replace(/\s/g,'_')}`), fillEl: fill };
+  });
+
+  // Activar animación del micrófono
+  micIcon.classList.add('mic-listening');
+  statusText.textContent = "🎙️ Escuchando… habla ahora";
+
+  // Cuenta regresiva de 10 segundos
+  let secondsLeft = 10;
+  countdownEl.textContent = secondsLeft;
+  voiceCountdownTimer = setInterval(() => {
+    secondsLeft--;
+    countdownEl.textContent = secondsLeft > 0 ? secondsLeft : "";
+    if (secondsLeft <= 0) {
+      clearInterval(voiceCountdownTimer);
+    }
+  }, 1000);
+
+  // Resultado acumulado (tomamos la clase de mayor confianza sostenida)
+  let detectedAnswer = null;
+  let bestConfidence = 0;
+
+  try {
+    await audioRecognizer.listen(result => {
+      const scores     = result.scores;
+      const labels     = audioRecognizer.wordLabels();
+      let topLabel     = "";
+      let topScore     = 0;
+
+      labels.forEach((label, idx) => {
+        const score = scores[idx];
+        const pct   = (score * 100).toFixed(1);
+        const els = barElements[label];
+        if (els) {
+          if (els.pctEl)  els.pctEl.textContent     = `${pct}%`;
+          if (els.fillEl) els.fillEl.style.width     = `${pct}%`;
+        }
+        if (score > topScore) {
+          topScore = score;
+          topLabel = label;
+        }
+      });
+
+      // Registro frame a frame para la transcripción raw
+      voiceTranscriptBuffer.push(`${new Date().toLocaleTimeString()} - ${topLabel} (${(topScore * 100).toFixed(1)}%)`);
+
+      // Guardar la mejor predicción no-ruido con umbral 75%
+      if (topLabel !== "Background Noise" && topScore > 0.75) {
+        if (topScore > bestConfidence) {
+          bestConfidence = topScore;
+          detectedAnswer = topLabel;
+          
+          voiceMetadata.clase = topLabel;
+          voiceMetadata.confianza = topScore * 100;
+        }
+
+        const cfg = AUDIO_CONFIG[topLabel] || {};
+        resultEl.textContent = `${cfg.emoji || ''} Detectado: "${cfg.label || topLabel}" (${(topScore*100).toFixed(0)}%)`;
+        resultEl.style.color = cfg.color || "#fff";
+      }
+
+    }, {
+      includeSpectrogram: false,
+      probabilityThreshold: 0.60,
+      invokeCallbackOnNoiseAndUnknown: true,
+      overlapFactor: 0.50
+    });
+  } catch (e) {
+    console.warn("[Audio] Error al iniciar escucha:", e.message);
+    statusText.textContent = "❌ Sin acceso al micrófono — usa los botones";
+    micIcon.classList.remove('mic-listening');
+    clearInterval(voiceCountdownTimer);
+    return;
+  }
+
+  // Timeout de 10 segundos → decidir basado en lo detectado
+  voiceListenTimeout = setTimeout(() => {
+    stopVoiceListening();
+
+    if (detectedAnswer === "Estoy bien") {
+      resultEl.textContent = "✅ Respuesta reconocida: Estoy bien";
+      resultEl.style.color = "#22c55e";
+      setTimeout(() => simularRespuestaVAPI('estoy bien'), 800);
+    } else if (detectedAnswer === "No estoy bien") {
+      resultEl.textContent = "🆘 Respuesta reconocida: No estoy bien";
+      resultEl.style.color = "#ef4444";
+      setTimeout(() => simularRespuestaVAPI('no_responde'), 800);
+    } else {
+      resultEl.textContent = "⏰ Sin respuesta detectada — enviando alerta";
+      resultEl.style.color = "#f59e0b";
+      setTimeout(() => simularRespuestaVAPI('no_responde'), 1200);
+    }
   }, 10000);
 }
 
+function stopVoiceListening() {
+  clearInterval(voiceCountdownTimer);
+  clearTimeout(voiceListenTimeout);
+
+  const micIcon = document.getElementById('micIcon');
+  if (micIcon) micIcon.classList.remove('mic-listening');
+
+  try {
+    if (audioRecognizer && audioRecognizer.isListening()) {
+      audioRecognizer.stopListening();
+    }
+  } catch (_) {}
+}
+
+// ─── Procesar respuesta (VAPI - manual o automático) ─────────────────────────
+
 async function simularRespuestaVAPI(respuestaUsuario) {
+  stopVoiceListening();
   clearTimeout(window.vapiTimeout);
   document.getElementById('vapiModal').classList.remove('active');
 
   const esBien = ['estoy bien', 'afirmativo', 'si'].includes(respuestaUsuario);
 
+  // Preparar datos para el evento, incluyendo la transcripción recopilada
+  const eventosData = {
+    paciente_id: currentPatientId,
+    incidente: esBien ? 'caida_detectada' : 'alerta_enviada',
+    respuesta_recibida: esBien ? 'El paciente respondió que se encuentra bien.' : 'Sin respuesta o respuesta negativa.',
+    transcripcion_voz: voiceTranscriptBuffer.join('\n'), // Todo el historial de detección
+    clase_detectada: voiceMetadata.clase,
+    confianza_modelo: voiceMetadata.confianza
+  };
+
   if (esBien) {
     updateStatusUI('safe', '✅ Normal');
     try {
-      await dbClient.from('eventos').insert({
-        paciente_id: currentPatientId,
-        incidente: 'caida_detectada',
-        respuesta_recibida: 'El paciente respondió que se encuentra bien.',
-      });
+      await dbClient.from('eventos').insert(eventosData);
+      
       await dbClient.from('pacientes_estado')
         .update({ estado_actual: 'normal' })
         .eq('paciente_id', currentPatientId);
     } catch (_) {}
+
   } else {
     updateStatusUI('alerta', '🚨 ALERTA CRÍTICA ENVIADA');
     try {
-      await dbClient.from('eventos').insert({
-        paciente_id: currentPatientId,
-        incidente: 'alerta_enviada',
-        respuesta_recibida: 'Sin respuesta o respuesta negativa.',
-      });
+      await dbClient.from('eventos').insert(eventosData);
+      
       await dbClient.from('pacientes_estado')
         .update({ estado_actual: 'alerta' })
         .eq('paciente_id', currentPatientId);
