@@ -178,7 +178,10 @@
           <div id="adminName" style="font-weight: 600;">SuperAdmin</div>
           <div style="font-size: 0.75rem; color: #22c55e;">● Online</div>
         </div>
-        <button onclick="logout()" class="btn" style="padding: 0.5rem 1rem;">Salir</button>
+        <a href="registro.html" class="btn" style="padding: 0.5rem 1rem; background: var(--admin-primary); border:none; text-decoration:none; display:flex; align-items:center; gap:0.4rem;">
+          <span style="font-size:0.9rem;">👤</span> Registrar Usuario
+        </a>
+        <button onclick="logout()" class="btn" style="padding: 0.5rem 1rem; border: 1px solid var(--glass-border);">Salir</button>
       </div>
     </header>
 
@@ -197,6 +200,16 @@
               <div class="stat-label">Concretados</div>
             </div>
           </div>
+        </div>
+
+        <div class="card-admin" style="margin-top: 1.5rem;">
+          <h3 style="margin-top:0;">⚡ Acciones Rápidas</h3>
+          <a href="registro.html" class="btn-inject" style="text-decoration:none; display:block; text-align:center; background: #22c55e;">
+            👤 Registrar Nuevo Usuario
+          </a>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.75rem; text-align:center;">
+            Crea pacientes, acudientes o administradores.
+          </p>
         </div>
 
         <div class="card-admin" style="margin-top: 1.5rem;">
@@ -220,7 +233,12 @@
         <div class="card-admin">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
             <h3 style="margin:0;">🔴 Monitoreo de Incidentes (Global)</h3>
-            <button onclick="loadIncidents()" class="btn" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); font-size: 0.8rem;">🔄 Refrescar</button>
+            <div style="display: flex; gap: 0.75rem;">
+              <button onclick="sendManualReport()" class="btn" style="background: rgba(99,102,241,0.1); border: 1px solid var(--admin-primary); color: var(--admin-primary); font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem;">
+                📧 Enviar Reporte Médico
+              </button>
+              <button onclick="loadIncidents()" class="btn" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); font-size: 0.8rem;">🔄 Refrescar</button>
+            </div>
           </div>
 
           <div style="overflow-x: auto;">
@@ -240,10 +258,65 @@
               </tbody>
             </table>
           </div>
+          </div>
+        </div>
+
+        <!-- NUEVA SECCIÓN: Gestión de Pacientes y Acudientes -->
+        <div class="card-admin" style="margin-top: 2rem; border-top: 3px solid var(--admin-primary);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h3 style="margin:0;">👥 Gestión de Pacientes y Acudientes</h3>
+            <span id="countUsers" class="badge badge-demo">Cargando...</span>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Acudiente / Familiar</th>
+                  <th>Paciente a Cargo</th>
+                  <th>Estado Vínculo</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody">
+                <tr><td colspan="3" style="text-align:center; padding: 2rem; color: var(--text-muted);">Consultando base de datos de usuarios...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          </div>
+        </div>
+
+        <!-- NUEVA SECCIÓN 2: Directororio Maestro de Pacientes (Para copiar IDs) -->
+        <div class="card-admin" style="margin-top: 2rem; border-top: 3px solid #10b981;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h3 style="margin:0;">📔 Directorio Maestro de Pacientes</h3>
+            <span id="patientCount" class="badge badge-real">Cargando...</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.5rem;">Usa estos IDs para vincular acudientes en el formulario de registro.</p>
+
+          <div style="overflow-x: auto;">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Nombre y Correo</th>
+                  <th>ID del Paciente (UUID)</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody id="patientsTableBody">
+                <tr><td colspan="3" style="text-align:center; padding: 2rem; color: var(--text-muted);">Cargando directorio de IDs...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </main>
     </div>
   </div>
+
+  <footer style="margin-top: 4rem; padding: 2rem 0; text-align: center; border-top: 1px solid var(--glass-border); background: rgba(15, 23, 42, 0.4);">
+     <img src="img/logo.jpg" alt="SafeWatch Logo" style="width: 40px; height: 40px; border-radius: 8px; margin-bottom: 0.5rem; filter: grayscale(0.2);">
+     <div style="font-weight: 600; color: #f8fafc; font-size: 0.9rem;">SafeWatch Guardian</div>
+     <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem;">© 2026 Inteligencia Artificial para el cuidado domiciliario</p>
+  </footer>
 
   <script src="js/auth.js"></script>
   <script src="js/admin.js"></script>

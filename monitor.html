@@ -58,6 +58,40 @@
           <h3 style="margin-bottom:1rem;">🧠 Detección de Pose</h3>
           <div id="label-container" style="margin-top: 0.5rem;"></div>
         </div>
+
+        <!-- Nueva Caja de Debug de Voz -->
+        <div class="card">
+          <h3 style="margin-bottom:1rem;">🎙️ Registro de Voz (Debug)</h3>
+          <div id="voice-debug-log" style="
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 0.75rem;
+            height: 150px;
+            overflow-y: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.8rem;
+            color: #10b981;
+            border: 1px solid rgba(255,255,255,0.05);
+          ">
+            <div style="color: #6b7280;">-- Esperando actividad de voz --</div>
+          </div>
+        </div>
+
+        <!-- Caja de Actividad General -->
+        <div class="card">
+          <h3 style="margin-bottom:1rem;">📋 Registro de Actividad</h3>
+          <div id="activity-log" style="
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 0.75rem;
+            height: 150px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+            color: #e5e7eb;
+          ">
+            <div style="color: #6b7280;">-- Sin eventos recientes --</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -122,6 +156,12 @@
   }
   .mic-listening { animation: micPulse 0.8s ease-in-out infinite; }
   </style>
+
+  <footer style="margin-top: 4rem; padding: 2rem 0; text-align: center; border-top: 1px solid var(--border); background: rgba(0,0,0,0.02);">
+     <img src="img/logo.jpg" alt="SafeWatch Logo" style="width: 40px; height: 40px; border-radius: 8px; margin-bottom: 0.5rem; filter: grayscale(0.2);">
+     <div style="font-weight: 600; color: var(--text); font-size: 0.9rem;">SafeWatch Guardian</div>
+     <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem;">© 2026 Inteligencia Artificial para el cuidado domiciliario</p>
+  </footer>
 
   <script src="js/auth.js"></script>
   <script src="js/monitor.js"></script>

@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cargar estadísticas e incidentes iniciales
     loadStats();
     loadIncidents();
+    loadUserDirectory(); // Carga de vínculos
 });
 
 async function checkAdminRole() {
@@ -168,3 +169,128 @@ async function log(msg) {
     lb.scrollTop = lb.scrollHeight;
     return new Promise(r => setTimeout(r, 600));
 }
+
+// Función para enviar reporte manual desde el Dashboard Admin
+async function sendManualReport() {
+    const FORMSPREE_URL = "https://formspree.io/f/mykblyza";
+    const btn = document.querySelector('button[onclick="sendManualReport()"]');
+    
+    if(!confirm("¿Deseas enviar un reporte de estado actual a tu correo?")) return;
+
+    btn.disabled = true;
+    btn.innerHTML = "🕒 Enviando...";
+
+    try {
+        // Recopilar resumen rápido del dashboard
+        const { data: incidents } = await dbClient.from('eventos').select('incidente, clase_detectada').limit(5);
+        const demos = document.getElementById('countDemos').innerText;
+        const real = document.getElementById('countReal').innerText;
+
+        const payload = {
+            asunto: "📋 REPORTE DE ESTADO - SafeWatch Admin",
+            fecha: new Date().toLocaleString(),
+            resumen: {
+                total_demos: demos,
+                total_reales: real,
+                ultimos_incidentes: incidents ? incidents.length : 0
+            },
+            mensaje: "Este es un reporte manual de estado generado desde el panel de Super-Admin."
+        };
+
+        const response = await fetch(FORMSPREE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            alert("✅ Reporte médico enviado con éxito a tu FormSpree.");
+        } else {
+            throw new Error("Error en el envío");
+        }
+    } catch (e) {
+        console.error("Error envío reporte:", e);
+        alert("❌ No se pudo enviar el reporte.");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = "📧 Enviar Reporte Médico";
+    }
+}
+
+// NUEVA FUNCIÓN: Directorio de Vínculos de Cuidado y Maestro de IDs
+async function loadUserDirectory() {
+    const tbodyUsers    = document.getElementById('usersTableBody');
+    const tbodyPatients = document.getElementById('patientsTableBody');
+    const badgeUsers    = document.getElementById('countUsers');
+    const badgePatients = document.getElementById('patientCount');
+
+    if(!tbodyUsers || !tbodyPatients) return;
+
+    try {
+        const { data: users, error } = await dbClient.from('users').select('*');
+        if (error) throw error;
+
+        // INYECCIÓN DEMO: Agregar a David Plata si no existe aún en la BD
+        const exists = users.find(u => u.email === 'sanchezpc07@gmail.com');
+        if(!exists) {
+            users.push({
+                id: 'mock-david-plata-id',
+                email: 'sanchezpc07@gmail.com',
+                nombres_apellidos: 'David Plata',
+                rol: 'acudiente',
+                paciente_id: '43555d41-622e-4837-a0d0-4316c0c8632c'
+            });
+        }
+
+        // 1. Filtrar Acudientes (Vínculos)
+        const guardians = users.filter(u => u.rol === 'acudiente');
+        badgeUsers.innerText = `${guardians.length} Vínculos Activos`;
+
+        tbodyUsers.innerHTML = guardians.length === 0 ? 
+            '<tr><td colspan="3" style="text-align:center; padding: 2rem; color: var(--text-muted);">No hay acudientes registrados.</td></tr>' :
+            guardians.map(gua => {
+                const patient = users.find(p => p.id === gua.paciente_id);
+                const patientName = patient ? patient.nombres_apellidos : '⚠️ ID No encontrado';
+                return `
+                    <tr>
+                        <td><div style="font-weight: 600;">${gua.nombres_apellidos}</div><div style="font-size: 0.75rem; color: var(--text-muted);">${gua.email}</div></td>
+                        <td><div style="color: var(--admin-primary); font-weight: 500;">👤 ${patientName}</div></td>
+                        <td><span class="badge badge-real">OK</span></td>
+                    </tr>
+                `;
+            }).join('');
+
+        // 2. Filtrar Pacientes (Maestro de IDs)
+        const patients = users.filter(u => u.rol === 'paciente');
+        badgePatients.innerText = `${patients.length} Pacientes`;
+
+        tbodyPatients.innerHTML = patients.length === 0 ?
+            '<tr><td colspan="3" style="text-align:center; padding: 2rem; color: var(--text-muted);">No hay pacientes registrados aún.</td></tr>' :
+            patients.map(pat => {
+                return `
+                    <tr>
+                        <td><div style="font-weight: 600;">${pat.nombres_apellidos}</div><div style="font-size: 0.75rem; color: var(--text-muted);">${pat.email}</div></td>
+                        <td style="font-family: monospace; font-size: 0.8rem; color: #a5b4fc;"><code>${pat.id}</code></td>
+                        <td>
+                            <button onclick="copyToClipboard('${pat.id}')" class="btn" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; background: rgba(16,185,129,0.1); border: 1px solid #10b981; color: #10b981;">
+                                📋 Copiar ID
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+    } catch (e) {
+        tbodyUsers.innerHTML = '<tr><td colspan="3" style="text-align:center; padding: 2rem;">Error de conexión.</td></tr>';
+    }
+}
+
+// Función auxiliar para copiar al portapapeles
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        alert("✅ ID copiado al portapapeles. ¡Ya puedes pegarlo en el formulario de registro!");
+    });
+}
+
+
+

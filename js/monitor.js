@@ -157,7 +157,9 @@ async function initTeachableMachinePose() {
     // Obtener ID del paciente
     try {
       const { data } = await dbClient.auth.getSession();
-      currentPatientId = data?.session?.user?.id || 'paciente-demo';
+      const mockUser = localStorage.getItem('safewatch_mock_user');
+      // ID Demo Fijo: 00000000-0000-0000-0000-000000000001 (Simula un registro válido)
+      currentPatientId = data?.session?.user?.id || (mockUser ? '00000000-0000-0000-0000-000000000001' : 'paciente-demo');
     } catch (_) {
       currentPatientId = 'paciente-demo';
     }
@@ -300,19 +302,32 @@ function triggerVoiceInteraction() {
     dbClient.from('pacientes_estado')
       .update({ estado_actual: 'posible_caida' })
       .eq('paciente_id', currentPatientId);
-  } catch (_) {}
+  } catch (e) {
+    console.warn("DB Update Error", e);
+  }
+  
+  if (currentPatientId.includes('000000')) {
+     logActivity("⚠️ Posible caída detectada (Demo Guardada)");
+  }
 
   // Abrir modal
   document.getElementById('vapiModal').classList.add('active');
 
   // Anunciar por síntesis de voz
-  const msg  = new SpeechSynthesisUtterance("¿Te encuentras bien? Por favor respond.");
+  const msg  = new SpeechSynthesisUtterance("¿Te encuentras bien? Por favor responde.");
   msg.lang   = 'es-ES';
   msg.rate   = 0.9;
-  window.speechSynthesis.speak(msg);
+  
+  // Cambiar estado visual antes de empezar
+  document.getElementById('listenStatusText').textContent = "Esperando que termine el anuncio...";
 
-  // Iniciar escucha con el modelo de audio de TM
-  startVoiceListening();
+  // SOLO iniciar la escucha cuando el asistente termine de hablar
+  msg.onend = () => {
+    console.log("[Voice] Anuncio terminado. Iniciando escucha...");
+    startVoiceListening();
+  };
+
+  window.speechSynthesis.speak(msg);
 }
 
 // ─── Escucha activa con Teachable Machine Audio ───────────────────────────────
@@ -340,6 +355,12 @@ async function startVoiceListening() {
 
   if (!audioModelLoaded || !audioRecognizer) {
     statusText.textContent = "❌ Modelo de voz no disponible — usa los botones";
+    return;
+  }
+
+  // PREVENCIÓN: Si ya está escuchando, no volver a iniciar
+  if (audioRecognizer.isListening()) {
+    console.warn("[Audio] Ya hay una escucha activa, ignorando nueva petición.");
     return;
   }
 
@@ -371,7 +392,9 @@ async function startVoiceListening() {
 
   // Activar animación del micrófono
   micIcon.classList.add('mic-listening');
-  statusText.textContent = "🎙️ Escuchando… habla ahora";
+  statusText.textContent = "🎙️ Escuchando... ¡Habla ahora!";
+  statusText.style.color = "#6366f1";
+  statusText.style.fontWeight = "bold";
 
   // Cuenta regresiva de 10 segundos
   let secondsLeft = 10;
@@ -412,8 +435,8 @@ async function startVoiceListening() {
       // Registro frame a frame para la transcripción raw
       voiceTranscriptBuffer.push(`${new Date().toLocaleTimeString()} - ${topLabel} (${(topScore * 100).toFixed(1)}%)`);
 
-      // Guardar la mejor predicción no-ruido con umbral 75%
-      if (topLabel !== "Background Noise" && topScore > 0.75) {
+      // Guardar la mejor predicción no-ruido con umbral 70%
+      if (topLabel !== "Background Noise" && topScore > 0.70) {
         if (topScore > bestConfidence) {
           bestConfidence = topScore;
           detectedAnswer = topLabel;
@@ -425,6 +448,16 @@ async function startVoiceListening() {
         const cfg = AUDIO_CONFIG[topLabel] || {};
         resultEl.textContent = `${cfg.emoji || ''} Detectado: "${cfg.label || topLabel}" (${(topScore*100).toFixed(0)}%)`;
         resultEl.style.color = cfg.color || "#fff";
+
+        // Actualizar Log de Debug en la pantalla principal
+        const logEl = document.getElementById('voice-debug-log');
+        if (logEl) {
+          const entry = document.createElement('div');
+          entry.style.marginBottom = "4px";
+          entry.style.borderBottom = "1px solid rgba(255,255,255,0.02)";
+          entry.innerHTML = `<span style="color:#6b7280;">[${new Date().toLocaleTimeString()}]</span> ${cfg.emoji || '🎙️'} <strong>${topLabel}</strong> (${(topScore*100).toFixed(0)}%)`;
+          logEl.insertBefore(entry, logEl.firstChild);
+        }
       }
 
     }, {
@@ -495,30 +528,86 @@ async function simularRespuestaVAPI(respuestaUsuario) {
   };
 
   if (esBien) {
-    updateStatusUI('safe', '✅ Normal');
+    updateStatusUI('safe', '✅ Normal' + (currentPatientId.includes('0000') ? ' (Demo)' : ''));
     try {
       await dbClient.from('eventos').insert(eventosData);
-      
       await dbClient.from('pacientes_estado')
         .update({ estado_actual: 'normal' })
         .eq('paciente_id', currentPatientId);
-    } catch (_) {}
-
+      logActivity(esBien ? "✅ El paciente confirmó estar bien (Guardado)" : "🚨 Alerta crítica simulada (Guardada)");
+    } catch (e) { console.warn("DB Write Error", e); }
   } else {
-    updateStatusUI('alerta', '🚨 ALERTA CRÍTICA ENVIADA');
+    updateStatusUI('alerta', '🚨 ALERTA CRÍTICA' + (currentPatientId.includes('0000') ? ' (Demo)' : ''));
     try {
       await dbClient.from('eventos').insert(eventosData);
-      
       await dbClient.from('pacientes_estado')
         .update({ estado_actual: 'alerta' })
         .eq('paciente_id', currentPatientId);
-    } catch (_) {}
+      logActivity("🚨 Alerta crítica registrada en BD");
+      
+      // ENVÍO DE EMAIL AUTOMÁTICO VÍA FORMSPREE
+      sendEmailAlert(eventosData);
 
+    } catch (e) { console.warn("DB Write Error", e); }
+  }
+
+    // (Desactivado temporalmente para evitar errores de red en demo)
+    /* 
     fetch('https://webhook.site/placeholder_url', {
       method: 'POST',
       body: JSON.stringify({ paciente: currentPatientId, estado: 'Emergencia' })
     }).catch(() => {});
-  }
+    */
 
   interactionActive = false;
 }
+
+// Función para enviar reporte por correo con diseño vía FormSpree
+async function sendEmailAlert(data) {
+  const FORMSPREE_URL = "https://formspree.io/f/mykblyza";
+  logActivity("📧 Enviando reporte por correo...");
+
+  const payload = {
+    asunto: "🚨 ALERTA CRÍTICA - SafeWatch Guardian",
+    paciente: data.paciente_id,
+    incidente: data.incidente,
+    detalle: data.respuesta_recibida,
+    deteccion_ia: data.clase_detectada + " (" + data.confianza_modelo + "%)",
+    transcripcion_raw: data.transcripcion_voz,
+    timestamp: new Date().toLocaleString()
+  };
+
+  try {
+    const response = await fetch(FORMSPREE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (response.ok) {
+      logActivity("✅ Reporte enviado con éxito a la central.");
+    } else {
+      throw new Error("Error en FormSpree");
+    }
+  } catch (e) {
+    console.error("Error enviando email:", e);
+    logActivity("❌ Error al enviar el reporte por correo.");
+  }
+}
+
+// Función auxiliar para el registro de actividad
+function logActivity(text) {
+  const logEl = document.getElementById('activity-log');
+  if (logEl) {
+    const entry = document.createElement('div');
+    entry.style.marginBottom = "6px";
+    entry.innerHTML = `<span style="color:#6b7280; font-size:0.75rem;">[${new Date().toLocaleTimeString()}]</span> ${text}`;
+    logEl.insertBefore(entry, logEl.firstChild);
+    
+    // Remover mensaje de "Sin eventos"
+    if (logEl.lastChild && logEl.lastChild.textContent.includes('Sin eventos')) {
+       logEl.removeChild(logEl.lastChild);
+    }
+  }
+}
+

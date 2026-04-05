@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registro de Pacientes - SafeWatch</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/jpeg" href="img/logo.jpg">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="container" style="max-width: 600px; margin-top: 50px;">
+    <div class="card">
+      <div style="text-align: center; margin-bottom: 2rem;">
+        <img src="img/logo.jpg" alt="Logo" style="width: 80px; height: 80px; border-radius: 15px; margin-bottom: 1rem;">
+        <h2>Registrar Nuevo Usuario</h2>
+        <p style="color: var(--text-muted);">Crea la cuenta para un nuevo paciente o acudiente</p>
+      </div>
+
+      <form id="registerForm">
+        <div class="form-group">
+          <label for="reg-nombres">Nombres y Apellidos Completos</label>
+          <input type="text" id="reg-nombres" class="form-control" placeholder="Ej: Juan Pérez" required>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-email">Correo Electrónico</label>
+          <input type="email" id="reg-email" class="form-control" placeholder="paciente@correo.com" required>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-password">Contraseña (Mínimo 6 caracteres)</label>
+          <input type="password" id="reg-password" class="form-control" placeholder="******" required minlength="6">
+        </div>
+
+        <div class="form-group">
+          <label for="reg-rol">Tipo de Usuario (Rol)</label>
+          <select id="reg-rol" class="form-control">
+            <option value="paciente">Paciente (Monitoreo activo)</option>
+            <option value="acudiente">Acudiente (Familiar / Responsable)</option>
+            <option value="superadmin">Super-Administrador</option>
+          </select>
+        </div>
+
+        <div id="paciente-vinculo" style="display:none; background: rgba(99,102,241,0.05); border: 1px solid rgba(99,102,241,0.1); padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+           <label for="reg-paciente-id">ID del Paciente a cargo (UUID)</label>
+           <input type="text" id="reg-paciente-id" class="form-control" placeholder="Pega el ID del paciente aquí">
+           <small style="color: var(--text-muted);">* Requerido para vincular un acudiente a un paciente específico.</small>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 2rem;">Crear Cuenta de Usuario</button>
+      </form>
+
+      <div id="registerMsg" style="margin-top: 1.5rem; text-align: center; display: none; padding: 1rem; border-radius: 8px;"></div>
+      
+      <div style="margin-top: 2rem; text-align: center;">
+        <a href="admin.html" class="link" style="color: var(--text-muted);">← Volver al Dashboard</a>
+      </div>
+    </div>
+  </div>
+
+  <footer style="margin-top: 4rem; padding: 2rem 0; text-align: center; border-top: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.02);">
+     <img src="img/logo.jpg" alt="SafeWatch Logo" style="width: 40px; height: 40px; border-radius: 8px; margin-bottom: 0.5rem; filter: grayscale(0.2);">
+     <div style="font-weight: 600; color: #1e293b; font-size: 0.9rem;">SafeWatch Guardian</div>
+     <p style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">© 2026 Inteligencia Artificial para el cuidado domiciliario</p>
+  </footer>
+
+  <script src="js/auth.js"></script>
+  <script src="js/registro.js"></script>
+</body>
+</html>

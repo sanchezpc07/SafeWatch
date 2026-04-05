@@ -1,6 +1,6 @@
 // INSTRUCCIONES: Reemplaza las siguientes variables con tus credenciales de Supabase
-const SUPABASE_URL = 'YOUR_SUPABASE_PROJECT_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://ujusnpmnmvinkwafgbus.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqdXNucG1ubXZpbmt3YWZnYnVzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNjA0MzEsImV4cCI6MjA5MDczNjQzMX0.jS_muL3OhZw005D-aqkDgTOsnS945SM7LynDxf23LAU';
 
 // Iniciar Supabase solo si las credenciales no son el texto por defecto
 let dbClient;
@@ -27,17 +27,42 @@ document.addEventListener('DOMContentLoaded', () => {
       const pwd = document.getElementById('password').value;
       
       try {
-        const { data, error } = await dbClient.auth.signInWithPassword({
-          email: email,
-          password: pwd
-        });
+        let sessionData, sessionError;
+
+        const isAdminEmail = email.toLowerCase().includes('admin');
+
+        // REGLAS DEMO: Admin -> S@fewatcH2026 | Paciente -> 123456
+        let isDemoLogin = false;
+        if (isAdminEmail && pwd === 'S@fewatcH2026') isDemoLogin = true;
+        if (!isAdminEmail && pwd === '123456') isDemoLogin = true;
+
+        if (isDemoLogin) {
+          console.log("Iniciando en MODO DEMO - Rol:", isAdminEmail ? 'Admin' : 'Paciente');
+          sessionData = { user: { id: isAdminEmail ? 'superadmin-mock-id' : 'patient-mock-id', email: email } };
+          localStorage.setItem('safewatch_mock_user', sessionData.user.id);
+        } else {
+          // MODO REAL: Consultar a Supabase
+          const { data, error } = await dbClient.auth.signInWithPassword({
+            email: email,
+            password: pwd
+          });
+          sessionData = data;
+          sessionError = error;
+        }
         
-        if (error) throw error;
+        if (sessionError) throw sessionError;
         
-        // Obtener Rol
-        const { data: profileData } = await dbClient.from('users').select('rol').eq('id', data.user.id).single();
+        // Determinar redirección
+        let rol = 'paciente';
+        if (isDemoLogin) {
+           rol = isAdminEmail ? 'superadmin' : 'paciente';
+        } else {
+           // Si no es demo, consultar rol real en base de datos
+           const { data: profileData } = await dbClient.from('users').select('rol').eq('id', sessionData.user.id).single();
+           if (profileData) rol = profileData.rol;
+        }
         
-        if (profileData && profileData.rol === 'superadmin') {
+        if (rol === 'superadmin') {
           window.location.href = 'admin.html';
         } else {
           window.location.href = 'monitor.html';
@@ -57,11 +82,15 @@ async function checkSession() {
   if (currentPath.includes('index.html')) return; // No chequear restricción en login
   
   const { data: { session } } = await dbClient.auth.getSession();
-  if (!session && !SUPABASE_URL.includes("YOUR")) {
-    window.location.href = 'index.html';
-  } else if (!session) {
-    // Mock Mode fallback
-  } else {
+  const mockUser = localStorage.getItem('safewatch_mock_user');
+
+  if (!session && !mockUser) {
+    if (!currentPath.includes('index.html')) window.location.href = 'index.html';
+  } else if (mockUser && !session) {
+    // Estamos en modo demo, simular datos de perfil
+    if (document.getElementById('adminName')) document.getElementById('adminName').innerText = "Admin Demo";
+    if (document.getElementById('patientName')) document.getElementById('patientName').innerText = "Paciente Demo";
+  } else if (session) {
     // Session activa, mostrar nombre
     const { data: profileData } = await dbClient.from('users').select('nombres_apellidos').eq('id', session.user.id).single();
     if(profileData) {
@@ -82,10 +111,10 @@ function createMockSupabase() {
     auth: {
       signInWithPassword: async ({email, password}) => {
         let userId = 'patient-mock-id';
-        if (email === 'Super-Admin@safewatch.com' && password === 'S@feWatcH2026') {
+        if (email === 'Super-Admin@safewatch.com' && password === 'S@fewatcH2026') {
           userId = 'superadmin-mock-id';
-        } else if (email === 'Sanchezpc07@gmail.com' && password === 'S@fewatcH') {
-          userId = 'superadmin-mock-id';
+        } else if (email.toLowerCase() === 'sanchezpc07@gmail.com') {
+          userId = 'mock-david-plata-id';
         } else if (password !== '123456') {
           return { data: null, error: new Error("Invalid credentials") };
         }
