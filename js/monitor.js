@@ -508,23 +508,30 @@ function stopVoiceListening() {
   } catch (_) {}
 }
 
+let alertInProgress = false;
+
 // ─── Procesar respuesta (VAPI - manual o automático) ─────────────────────────
 
 async function simularRespuestaVAPI(respuestaUsuario) {
+  if (alertInProgress) return;
+  alertInProgress = true; 
+
   stopVoiceListening();
   clearTimeout(window.vapiTimeout);
   document.getElementById('vapiModal').classList.remove('active');
 
   const esBien = ['estoy bien', 'afirmativo', 'si'].includes(respuestaUsuario);
 
-  // Preparar datos para el evento, incluyendo la transcripción recopilada
+  // Preparar datos para el evento con un ID garantizado como único
   const eventosData = {
+    id: crypto.randomUUID(), // Forzamos un ID nuevo en cada intento para evitar el 409 Conflict
     paciente_id: currentPatientId,
     incidente: esBien ? 'caida_detectada' : 'alerta_enviada',
     respuesta_recibida: esBien ? 'El paciente respondió que se encuentra bien.' : 'Sin respuesta o respuesta negativa.',
-    transcripcion_voz: voiceTranscriptBuffer.join('\n'), // Todo el historial de detección
+    transcripcion_voz: voiceTranscriptBuffer.join('\n'), 
     clase_detectada: voiceMetadata.clase,
-    confianza_modelo: voiceMetadata.confianza
+    confianza_modelo: voiceMetadata.confianza,
+    fecha_hora: new Date().toISOString()
   };
 
   if (esBien) {
@@ -565,16 +572,25 @@ async function simularRespuestaVAPI(respuestaUsuario) {
 // Función para enviar reporte por correo con diseño vía FormSpree
 async function sendEmailAlert(data) {
   const FORMSPREE_URL = "https://formspree.io/f/mykblyza";
+  
+  // Obtener el nombre real del paciente desde la interfaz
+  const nameEl = document.getElementById('patientName');
+  const nombrePaciente = nameEl ? nameEl.innerText.replace('Paciente: ', '') : "Paciente Desconocido";
+
   logActivity("📧 Enviando reporte por correo...");
 
   const payload = {
-    asunto: "🚨 ALERTA CRÍTICA - SafeWatch Guardian",
-    paciente: data.paciente_id,
-    incidente: data.incidente,
-    detalle: data.respuesta_recibida,
-    deteccion_ia: data.clase_detectada + " (" + data.confianza_modelo + "%)",
-    transcripcion_raw: data.transcripcion_voz,
-    timestamp: new Date().toLocaleString()
+    _subject: "🚨 ALERTA: " + nombrePaciente + " requiere asistencia",
+    "REPORTE DE INCIDENTE": "SAFEWATCH GUARDIAN v1.0",
+    "PACIENTE": "👤 " + nombrePaciente,
+    "ESTADO":  "🚨 EMERGENCIA CONFIRMADA",
+    "DETALLE": "⚠️ " + data.incidente.replace('_', ' ').toUpperCase(),
+    "CONFIANZA_IA": data.clase_detectada + " [" + Math.round(data.confianza_modelo) + "%]",
+    "ANALISIS_VOZ": "🗣️ " + data.respuesta_recibida,
+    "HISTORIAL": data.transcripcion_voz,
+    "LINK_ACCION": "🔗 Ver ubicación y reporte en: http://127.0.0.1:5500/admin.html",
+    "ID_SISTEMA": data.paciente_id,
+    "FECHA": new Date().toLocaleString()
   };
 
   try {

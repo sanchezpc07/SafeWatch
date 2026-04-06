@@ -87,9 +87,9 @@ async function checkSession() {
   if (!session && !mockUser) {
     if (!currentPath.includes('index.html')) window.location.href = 'index.html';
   } else if (mockUser && !session) {
-    // Estamos en modo demo, simular datos de perfil
-    if (document.getElementById('adminName')) document.getElementById('adminName').innerText = "Admin Demo";
-    if (document.getElementById('patientName')) document.getElementById('patientName').innerText = "Paciente Demo";
+    // Estamos en modo demo, simular nombres reales para la presentación
+    if (document.getElementById('adminName')) document.getElementById('adminName').innerText = "Super-Admin";
+    if (document.getElementById('patientName')) document.getElementById('patientName').innerText = "Humberto Plata";
   } else if (session) {
     // Session activa, mostrar nombre
     const { data: profileData } = await dbClient.from('users').select('nombres_apellidos').eq('id', session.user.id).single();
